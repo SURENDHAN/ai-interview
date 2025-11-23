@@ -53,9 +53,7 @@ An AI-powered interview practice platform with voice interaction, coding challen
 4. Test thoroughly
 5. Submit a pull request
 
-## 📄 License
 
-[Your License Here]
 
 ## 📧 Support
 

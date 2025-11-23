@@ -419,6 +419,201 @@
                     if (!isRec) {
                         isRec = true;
                         startT = Date.now();
+                </div>
+                <div>
+                    <h3 class="font-bold text-orange-400 mb-2">Areas for Improvement</h3>
+                    <ul id="feedback-improvements" class="list-disc list-inside text-gray-300 space-y-1"></ul>
+                </div>
+                <div>
+                    <h3 class="font-bold text-blue-400 mb-2">Summary</h3>
+                    <p id="feedback-summary" class="text-gray-300 leading-relaxed"></p>
+                </div>
+            </div>
+
+            <button onclick="location.reload()"
+                class="mt-8 w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold transition-all">
+                Start New Interview
+            </button>
+        </div>
+    </main>
+
+    <script>
+        lucide.createIcons();
+
+        // Configuration
+        const CONFIG = {
+            SILENCE_TIMEOUT: 1200,
+            MIN_SPEECH: 500,
+            THRESHOLD: 30,
+            TIMER_DURATION: 300 // 5 minutes for coding
+        };
+
+        // State Variables
+        let ws;
+        let audioCtx;
+        let micStream;
+        let analyser;
+        let mediaRecorder;
+        let isPlay = false;
+        let queue = [];
+        let selectedRole = null;
+        let pendingProblem = null;
+        let timerInterval;
+        let timeRemaining;
+        let codingPhaseActive = false;
+        let currProbId = null;
+        let chunks = [];
+        let isRec = false;
+        let timer;
+        let startT;
+
+        // Initialize Ace Editor
+        const editor = ace.edit("editor");
+        editor.setTheme("ace/theme/monokai");
+        editor.session.setMode("ace/mode/python");
+        editor.setOptions({ fontSize: "14px", showPrintMargin: false });
+
+        // Role Selection Logic
+        function selectRole(card) {
+            // Remove selected class from all
+            document.querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
+            // Add to clicked
+            card.classList.add('selected');
+            // Enable start button
+            document.getElementById('start-interview-btn').disabled = false;
+            selectedRole = card.dataset.role;
+        }
+
+        async function startInterview() {
+            if (!selectedRole) return;
+
+            document.getElementById('role-selection').classList.add('hidden');
+            document.getElementById('chat-layout').classList.remove('hidden');
+
+            // Update badge
+            document.getElementById('role-badge').innerText = `ROLE: ${selectedRole.replace('_', ' ').toUpperCase()}`;
+
+            await initMic();
+            connect();
+        }
+
+        function endInterview() {
+            if (ws && ws.readyState === 1) {
+                ws.send(JSON.stringify({ type: "request_feedback" }));
+                addMsg('system', 'Generating feedback...');
+            }
+        }
+
+        function showFeedback(data) {
+            document.getElementById('chat-layout').classList.add('hidden');
+            document.getElementById('interview-layout').classList.add('hidden');
+            document.getElementById('feedback-layout').classList.remove('hidden');
+
+            document.getElementById('score-overall').innerText = `${data.overall_score}/10`;
+            document.getElementById('score-comm').innerText = `${data.communication.score}/10`;
+            document.getElementById('score-tech').innerText = `${data.technical_knowledge.score}/10`;
+
+            const sList = document.getElementById('feedback-strengths');
+            sList.innerHTML = data.strengths.map(s => `<li>${s}</li>`).join('');
+
+            const iList = document.getElementById('feedback-improvements');
+            iList.innerHTML = data.improvements.map(i => `<li>${i}</li>`).join('');
+
+            document.getElementById('feedback-summary').innerText = data.summary;
+        }
+
+        // Timer Functions
+        function startTimer() {
+            timeRemaining = CONFIG.TIMER_DURATION;
+            document.getElementById('timer').classList.remove('hidden');
+            updateTimerDisplay();
+
+            timerInterval = setInterval(() => {
+                timeRemaining--;
+                updateTimerDisplay();
+
+                if (timeRemaining <= 60 && timeRemaining > 0) {
+                    document.getElementById('timer').classList.add('timer-warning', 'bg-red-600');
+                }
+
+                if (timeRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    document.getElementById('timer').classList.add('bg-red-700');
+                    document.getElementById('timer').innerText = "TIME'S UP!";
+                    // Close coding window after timer expires
+                    setTimeout(closeCodingWindow, 2000);
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const mins = Math.floor(timeRemaining / 60);
+            const secs = timeRemaining % 60;
+            document.getElementById('timer').innerText = `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                document.getElementById('timer').classList.remove('timer-warning', 'bg-red-600', 'bg-red-700');
+                document.getElementById('timer').classList.add('hidden');
+            }
+        }
+
+        function closeCodingWindow() {
+            codingPhaseActive = false;
+            stopTimer();
+            document.getElementById('interview-layout').classList.add('hidden');
+            document.getElementById('chat-layout').classList.remove('hidden');
+        }
+
+        // Audio Initialization
+        async function initMic() {
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const src = audioCtx.createMediaStreamSource(micStream);
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 512;
+                src.connect(analyser);
+
+                mediaRecorder = new MediaRecorder(micStream, { mimeType: 'audio/webm' });
+                mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+                mediaRecorder.onstop = () => {
+                    const duration = Date.now() - startT;
+                    if (chunks.length > 0 && duration > CONFIG.MIN_SPEECH) {
+                        if (ws && ws.readyState === 1 && !codingPhaseActive) {
+                            ws.send(new Blob(chunks, { type: 'audio/webm' }));
+                        }
+                    }
+                    chunks = [];
+                };
+
+                monitor();
+                document.getElementById('vad-status').innerText = "Mic Active";
+                document.getElementById('vad-status').className = "text-sm text-green-500 mb-4 font-bold";
+
+            } catch (err) {
+                console.error("Mic Error:", err);
+                addMsg('system', 'Error accessing microphone. Please allow permissions.');
+            }
+        }
+
+        function monitor() {
+            const data = new Uint8Array(analyser.frequencyBinCount);
+            const loop = () => {
+                requestAnimationFrame(loop);
+                analyser.getByteFrequencyData(data);
+                const vol = data.reduce((a, b) => a + b) / data.length;
+
+                document.querySelectorAll('.bar').forEach((b, i) => b.style.height = Math.min(100, vol * (i + 1)) + '%');
+
+                if (isPlay || codingPhaseActive) return;
+
+                if (vol > CONFIG.THRESHOLD) {
+                    if (!isRec) {
+                        isRec = true;
+                        startT = Date.now();
                         mediaRecorder.start();
                         document.getElementById('avatar').classList.add('border-green-500', 'border-4');
                         document.getElementById('vad-status').innerText = "Listening...";
@@ -439,7 +634,8 @@
 
         // WebSocket & Audio
         function connect() {
-            ws = new WebSocket(`ws://${location.host}/ws`);
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${location.host}/ws`);
             ws.binaryType = "arraybuffer";
             ws.onopen = () => {
                 document.getElementById('status').innerText = "Connected";

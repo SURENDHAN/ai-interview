@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Sura AI - AI Interview Practice</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.24.1/ace.js"></script>
+    <style>
+        .bar {
+            transition: height 0.1s ease;
+        }
+
+        .timer-warning {
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .role-card {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .role-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .role-card.selected {
+            border-color: #3b82f6;
+            background-color: rgba(59, 130, 246, 0.1);
+        }
+
+        /* Smooth scrolling */
+        * {
+            scroll-behavior: smooth;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-900 text-white h-screen flex flex-col font-sans overflow-hidden">
+
+    <header class="h-14 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-6">
+        <div class="font-bold text-lg">SURA <span class="text-blue-500">AI INTERVIEW PRACTICE</span></div>
+        <div class="flex gap-4 items-center">
+            <div id="timer" class="px-4 py-1 bg-slate-700 rounded text-lg font-mono hidden">5:00</div>
+            <div id="status" class="px-3 py-1 bg-gray-700 rounded-full text-xs">Ready</div>
+        </div>
+    </header>
+
+    <!-- Role Selection Screen -->
+    <main id="role-selection" class="flex-1 flex flex-col items-center justify-center p-8 bg-slate-900">
+        <h1 class="text-4xl font-bold mb-4">Choose Your Interview Role</h1>
+        <p class="text-gray-400 mb-8">Select the role you want to practice for</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl w-full mb-8">
+            <div class="role-card bg-slate-800 p-6 rounded-xl border-2 border-slate-700" data-role="software_engineer"
+                onclick="selectRole(this)">
+                <div class="text-3xl mb-3">💻</div>
+                <h3 class="text-xl font-bold mb-2">Software Engineer</h3>
+                <p class="text-sm text-gray-400">Technical interview with coding challenge</p>
+            </div>
+
+            <div class="role-card bg-slate-800 p-6 rounded-xl border-2 border-slate-700" data-role="product_manager"
+                onclick="selectRole(this)">
+                <div class="text-3xl mb-3">📊</div>
+                <h3 class="text-xl font-bold mb-2">Product Manager</h3>
+                <p class="text-sm text-gray-400">Product strategy with case study</p>
+            </div>
+
+            <div class="role-card bg-slate-800 p-6 rounded-xl border-2 border-slate-700" data-role="sales"
+                onclick="selectRole(this)">
+                <div class="text-3xl mb-3">💼</div>
+                <h3 class="text-xl font-bold mb-2">Sales</h3>
+                <p class="text-sm text-gray-400">Sales scenarios and objection handling</p>
+            </div>
+
+            <div class="role-card bg-slate-800 p-6 rounded-xl border-2 border-slate-700" data-role="retail"
+                onclick="selectRole(this)">
+                <div class="text-3xl mb-3">🛍️</div>
+                <h3 class="text-xl font-bold mb-2">Retail</h3>
+                <p class="text-sm text-gray-400">Customer service and operations</p>
+            </div>
+
+            <div class="role-card bg-slate-800 p-6 rounded-xl border-2 border-slate-700" data-role="general"
+                onclick="selectRole(this)">
+                <div class="text-3xl mb-3">🎯</div>
+                <h3 class="text-xl font-bold mb-2">General</h3>
+                <p class="text-sm text-gray-400">Standard behavioral interview</p>
+            </div>
+        </div>
+
+        <button id="start-interview-btn" onclick="startInterview()" disabled
+            class="bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed px-8 py-3 rounded-full font-bold text-lg transition-all">
+            START INTERVIEW
+        </button>
+    </main>
+
+    <!-- Main Interview Layout -->
+    <main id="interview-layout" class="flex-1 flex hidden">
+        <!-- Left: Problem Description -->
+        <div class="w-2/5 bg-slate-900 border-r border-slate-700 overflow-y-auto p-6">
+            <h2 id="prob-title" class="text-2xl font-bold text-blue-400 mb-4">Problem Title</h2>
+            <div id="prob-description" class="text-gray-300 mb-6 leading-relaxed"></div>
+
+            <h3 class="text-lg font-bold text-blue-400 mb-3">Sample Test Cases</h3>
+            <div id="sample-tests" class="space-y-3"></div>
+        </div>
+
+        <!-- Right: Code Editor + Output -->
+        <div class="flex-1 flex flex-col">
+            <div class="h-10 bg-slate-800 flex justify-between items-center px-4 border-b border-slate-700">
+                <span class="text-xs font-bold text-gray-400">Python 3</span>
+                <div class="flex gap-2">
+                    <button onclick="dropTest()"
+                        class="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-600/50 text-xs px-4 py-1 rounded font-bold">Drop
+                        Test</button>
+                    <button onclick="runCode()"
+                        class="bg-blue-600 hover:bg-blue-700 text-xs px-4 py-1 rounded font-bold">Run Code</button>
+                    <button onclick="submitCode()"
+                        class="bg-green-600 hover:bg-green-700 text-xs px-4 py-1 rounded font-bold">Submit</button>
+                </div>
+            </div>
+            <div id="editor" class="flex-1"></div>
+
+            <!-- Output Console -->
+            <div class="h-48 bg-black border-t border-slate-700 flex flex-col">
+                <div class="h-8 bg-slate-800 flex items-center px-4 border-b border-slate-700">
+                    <span class="text-xs font-bold text-gray-400">Output</span>
+                </div>
+                <pre id="output" class="flex-1 p-4 text-sm text-gray-300 overflow-auto font-mono"></pre>
+            </div>
+        </div>
+    </main>
+
+    <!-- Initial Chat Interface -->
+    <main id="chat-layout" class="flex-1 flex hidden">
+        <div class="w-1/3 p-4 bg-slate-900 overflow-y-auto flex flex-col gap-3" id="transcript"></div>
+        <div class="flex-1 bg-slate-950 flex flex-col items-center justify-center p-6 relative">
+            <!-- Role Badge -->
+            <div id="role-badge"
+                class="absolute top-4 right-4 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs text-gray-400 font-mono">
+                ROLE: NONE
+            </div>
+
+            <div id="avatar"
+                class="w-40 h-40 rounded-full bg-blue-700 flex items-center justify-center mb-8 opacity-60 transition-all">
+                <i data-lucide="mic" class="w-12 h-12"></i>
+            </div>
+            <div class="flex gap-1 h-10 items-end mb-4">
+                <div class="w-2 bg-blue-500 bar h-2"></div>
+                <div class="w-2 bg-blue-500 bar h-2"></div>
+                <div class="w-2 bg-blue-500 bar h-2"></div>
+            </div>
+            <div id="vad-status" class="text-sm text-gray-500 mb-4">Idle</div>
+
+            <div class="flex gap-4">
+                <button id="end-interview-btn" onclick="endInterview()"
+                    class="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-600/50 px-6 py-2 rounded-full font-bold transition-all">
+                    END INTERVIEW
+                </button>
+                <button id="coding-challenge-btn"
+                    class="bg-green-600 hover:bg-green-500 px-6 py-2 rounded-full font-bold hidden transition-all shadow-lg shadow-green-900/50 animate-bounce"
+                    onclick="startCodingChallenge()">
+                    START CODING CHALLENGE
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Feedback Screen -->
+    <main id="feedback-layout" class="flex-1 flex flex-col items-center justify-center p-8 hidden bg-slate-900">
+        <div class="max-w-4xl w-full bg-slate-800 rounded-2xl p-8 border border-slate-700 shadow-2xl">
+            <h1 class="text-3xl font-bold mb-6 text-center">Interview Feedback</h1>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-slate-900 p-4 rounded-xl text-center">
+                    <div class="text-gray-400 text-sm mb-1">Overall Score</div>
+                    <div id="score-overall" class="text-4xl font-bold text-blue-400">0/10</div>
+                </div>
+                <div class="bg-slate-900 p-4 rounded-xl text-center">
+                    <div class="text-gray-400 text-sm mb-1">Communication</div>
+                    <div id="score-comm" class="text-2xl font-bold text-green-400">0/10</div>
+                </div>
+                <div class="bg-slate-900 p-4 rounded-xl text-center">
+                    <div class="text-gray-400 text-sm mb-1">Technical</div>
+                    <div id="score-tech" class="text-2xl font-bold text-purple-400">0/10</div>
+                </div>
+            </div>
+
+            <div class="space-y-6">
+                <div>
+                    <h3 class="font-bold text-green-400 mb-2">Strengths</h3>
+                    <ul id="feedback-strengths" class="list-disc list-inside text-gray-300 space-y-1"></ul>
+                </div>
+                <div>
+                    <h3 class="font-bold text-orange-400 mb-2">Areas for Improvement</h3>
+                    <ul id="feedback-improvements" class="list-disc list-inside text-gray-300 space-y-1"></ul>
+                </div>
+                <div>
+                    <h3 class="font-bold text-blue-400 mb-2">Summary</h3>
+                    <p id="feedback-summary" class="text-gray-300 leading-relaxed"></p>
+                </div>
+            </div>
+
+            <button onclick="location.reload()"
+                class="mt-8 w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold transition-all">
+                Start New Interview
+            </button>
+        </div>
+    </main>
+
+    <script>
+        lucide.createIcons();
+
+        // Configuration
+        const CONFIG = {
+            SILENCE_TIMEOUT: 1200,
+            MIN_SPEECH: 500,
+            THRESHOLD: 30,
+            TIMER_DURATION: 300 // 5 minutes for coding
+        };
+
+        // State Variables
+        let ws;
+        let audioCtx;
+        let micStream;
+        let analyser;
+        let mediaRecorder;
+        let isPlay = false;
+        let queue = [];
+        let selectedRole = null;
+        let pendingProblem = null;
+        let timerInterval;
+        let timeRemaining;
+        let codingPhaseActive = false;
+        let currProbId = null;
+        let chunks = [];
+        let isRec = false;
+        let timer;
+        let startT;
+
+        // Initialize Ace Editor
+        const editor = ace.edit("editor");
+        editor.setTheme("ace/theme/monokai");
+        editor.session.setMode("ace/mode/python");
+        editor.setOptions({ fontSize: "14px", showPrintMargin: false });
+
+        // Role Selection Logic
+        function selectRole(card) {
+            // Remove selected class from all
+            document.querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
+            // Add to clicked
+            card.classList.add('selected');
+            // Enable start button
+            document.getElementById('start-interview-btn').disabled = false;
+            selectedRole = card.dataset.role;
+        }
+
+        async function startInterview() {
+            if (!selectedRole) return;
+
+            document.getElementById('role-selection').classList.add('hidden');
+            document.getElementById('chat-layout').classList.remove('hidden');
+
+            // Update badge
+            document.getElementById('role-badge').innerText = `ROLE: ${selectedRole.replace('_', ' ').toUpperCase()}`;
+
+            await initMic();
+            connect();
+        }
+
+        function endInterview() {
+            if (ws && ws.readyState === 1) {
+                ws.send(JSON.stringify({ type: "request_feedback" }));
+                addMsg('system', 'Generating feedback...');
+            }
+        }
+
+        function showFeedback(data) {
+            document.getElementById('chat-layout').classList.add('hidden');
+            document.getElementById('interview-layout').classList.add('hidden');
+            document.getElementById('feedback-layout').classList.remove('hidden');
+
+            document.getElementById('score-overall').innerText = `${data.overall_score}/10`;
+            document.getElementById('score-comm').innerText = `${data.communication.score}/10`;
+            document.getElementById('score-tech').innerText = `${data.technical_knowledge.score}/10`;
+
+            const sList = document.getElementById('feedback-strengths');
+            sList.innerHTML = data.strengths.map(s => `<li>${s}</li>`).join('');
+
+            const iList = document.getElementById('feedback-improvements');
+            iList.innerHTML = data.improvements.map(i => `<li>${i}</li>`).join('');
+
+            document.getElementById('feedback-summary').innerText = data.summary;
+        }
+
+        // Timer Functions
+        function startTimer() {
+            timeRemaining = CONFIG.TIMER_DURATION;
+            document.getElementById('timer').classList.remove('hidden');
+            updateTimerDisplay();
+
+            timerInterval = setInterval(() => {
+                timeRemaining--;
+                updateTimerDisplay();
+
+                if (timeRemaining <= 60 && timeRemaining > 0) {
+                    document.getElementById('timer').classList.add('timer-warning', 'bg-red-600');
+                }
+
+                if (timeRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    document.getElementById('timer').classList.add('bg-red-700');
+                    document.getElementById('timer').innerText = "TIME'S UP!";
+                    // Close coding window after timer expires
+                    setTimeout(closeCodingWindow, 2000);
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const mins = Math.floor(timeRemaining / 60);
+            const secs = timeRemaining % 60;
+            document.getElementById('timer').innerText = `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                document.getElementById('timer').classList.remove('timer-warning', 'bg-red-600', 'bg-red-700');
+                document.getElementById('timer').classList.add('hidden');
+            }
+        }
+
+        function closeCodingWindow() {
+            codingPhaseActive = false;
+            stopTimer();
+            document.getElementById('interview-layout').classList.add('hidden');
+            document.getElementById('chat-layout').classList.remove('hidden');
+        }
+
+        // Audio Initialization
+        async function initMic() {
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const src = audioCtx.createMediaStreamSource(micStream);
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 512;
+                src.connect(analyser);
+
+                mediaRecorder = new MediaRecorder(micStream, { mimeType: 'audio/webm' });
+                mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+                mediaRecorder.onstop = () => {
+                    const duration = Date.now() - startT;
+                    if (chunks.length > 0 && duration > CONFIG.MIN_SPEECH) {
+                        if (ws && ws.readyState === 1 && !codingPhaseActive) {
+                            ws.send(new Blob(chunks, { type: 'audio/webm' }));
+                        }
+                    }
+                    chunks = [];
+                };
+
+                monitor();
+                document.getElementById('vad-status').innerText = "Mic Active";
+                document.getElementById('vad-status').className = "text-sm text-green-500 mb-4 font-bold";
+
+            } catch (err) {
+                console.error("Mic Error:", err);
+                addMsg('system', 'Error accessing microphone. Please allow permissions.');
+            }
+        }
+
+        function monitor() {
+            const data = new Uint8Array(analyser.frequencyBinCount);
+            const loop = () => {
+                requestAnimationFrame(loop);
+                analyser.getByteFrequencyData(data);
+                const vol = data.reduce((a, b) => a + b) / data.length;
+
+                document.querySelectorAll('.bar').forEach((b, i) => b.style.height = Math.min(100, vol * (i + 1)) + '%');
+
+                if (isPlay || codingPhaseActive) return;
+
+                if (vol > CONFIG.THRESHOLD) {
+                    if (!isRec) {
+                        isRec = true;
+                        startT = Date.now();
+                        mediaRecorder.start();
+                        document.getElementById('avatar').classList.add('border-green-500', 'border-4');
+                        document.getElementById('vad-status').innerText = "Listening...";
+                    }
+                    clearTimeout(timer);
+                    timer = setTimeout(() => {
+                        if (isRec) {
+                            isRec = false;
+                            mediaRecorder.stop();
+                            document.getElementById('avatar').classList.remove('border-green-500', 'border-4');
+                            document.getElementById('vad-status').innerText = "Processing...";
+                        }
+                    }, CONFIG.SILENCE_TIMEOUT);
+                }
+            };
+            loop();
+        }
+
+        // WebSocket & Audio
+        function connect() {
+            ws = new WebSocket(`ws://${location.host}/ws`);
+            ws.binaryType = "arraybuffer";
+            ws.onopen = () => {
+                document.getElementById('status').innerText = "Connected";
+                document.getElementById('status').className = "px-3 py-1 bg-green-600 rounded-full text-xs";
+                // Send selected role
+                ws.send(JSON.stringify({ type: "role_selection", role: selectedRole }));
+            };
+
+            ws.onmessage = (e) => {
+                if (e.data instanceof ArrayBuffer) {
+                    playAudio(e.data);
+                } else {
+                    const msg = JSON.parse(e.data);
+                    if (msg.type === 'text') addMsg(msg.sender, msg.content);
+                    if (msg.type === 'show_button') {
+                        // Show the button and store problem data
+                        pendingProblem = msg.problem;
+                        document.getElementById('coding-challenge-btn').classList.remove('hidden');
+                    }
+                    if (msg.type === 'code_result') {
+                        const output = msg.output || "Executed successfully (no output).";
+                        document.getElementById('output').innerText = output;
+
+                        // Check if all tests passed
+                        if (output.includes("PASSED") && !output.includes("FAILED")) {
+                            stopTimer();
+                            setTimeout(closeCodingWindow, 3000); // Close after 3 seconds
+                        }
+                    }
+                    if (msg.type === 'feedback') {
+                        showFeedback(msg.data);
+                    }
+                }
+            };
+
+            ws.onclose = () => {
+                document.getElementById('status').innerText = "Reconnecting...";
+                document.getElementById('status').className = "px-3 py-1 bg-red-600 rounded-full text-xs";
+                setTimeout(connect, 3000);
+            };
+        }
+
+        function showProblem(problem) {
+            // Switch to interview layout
+            document.getElementById('chat-layout').classList.add('hidden');
+            document.getElementById('interview-layout').classList.remove('hidden');
+            codingPhaseActive = true;
+
+            // Populate problem details
+            document.getElementById('prob-title').innerText = problem.title;
+            document.getElementById('prob-description').innerText = problem.description;
+            editor.setValue(problem.starter_code, -1);
+            currProbId = problem.id;
+
+            // Display sample test cases
+            const testsDiv = document.getElementById('sample-tests');
+            testsDiv.innerHTML = '';
+            if (problem.test_cases && problem.test_cases.length > 0) {
+                problem.test_cases.forEach((test, i) => {
+                    const testDiv = document.createElement('div');
+                    testDiv.className = 'bg-slate-800 p-3 rounded';
+                    testDiv.innerHTML = `
+                        <div class="text-xs font-bold text-gray-400 mb-1">Test Case ${i + 1}</div>
+                        <div class="text-xs text-gray-300"><span class="text-blue-400">Input:</span> ${test.input_code.replace('print(solve(', '').replace('))', '')}</div>
+                        <div class="text-xs text-gray-300"><span class="text-green-400">Expected:</span> ${test.expected}</div>
+                    `;
+                    testsDiv.appendChild(testDiv);
+                });
+            }
+        }
+
+        function addMsg(sender, content) {
+            const div = document.createElement('div');
+            div.className = sender === 'user' ? 'bg-slate-800 p-3 rounded self-end max-w-xs' : 'bg-blue-900 p-3 rounded self-start max-w-xs';
+            div.innerText = content;
+            document.getElementById('transcript').appendChild(div);
+            document.getElementById('transcript').scrollTop = document.getElementById('transcript').scrollHeight;
+        }
+
+        function playAudio(buf) {
+            if (!audioCtx) return;
+            audioCtx.decodeAudioData(buf, (dec) => {
+                queue.push(dec);
+                if (!isPlay) playNext();
+            });
+        }
+
+        function playNext() {
+            if (!queue.length) { isPlay = false; document.getElementById('avatar').classList.remove('scale-110'); return; }
+            isPlay = true;
+            document.getElementById('avatar').classList.add('scale-110');
+            const src = audioCtx.createBufferSource();
+            src.buffer = queue.shift();
+            src.connect(audioCtx.destination);
+            src.start(0);
+            src.onended = playNext;
+        }
+
+        window.submitCode = () => {
+            if (ws && ws.readyState === 1) {
+                ws.send(JSON.stringify({ type: "code_submission", problem_id: currProbId, code: editor.getValue() }));
+                document.getElementById('output').innerText = "Submitting...";
+            }
+        };
+
+        window.startCodingChallenge = () => {
+            if (pendingProblem) {
+                showProblem(pendingProblem);
+                // Hide button after clicking
+                document.getElementById('coding-challenge-btn').classList.add('hidden');
+            }
+        };
+
+        window.dropTest = () => {
+            if (confirm("⚠️ WARNING: Dropping the test will result in 0 marks for the technical assessment.\n\nAre you sure you want to skip?")) {
+                if (ws && ws.readyState === 1) {
+                    ws.send(JSON.stringify({ type: "drop_test" }));
+                    closeCodingWindow();
+                    addMsg('system', '❌ Coding test dropped. Technical score: 0/10.');
+                }
+            }
+        };
+    </script>
+</body>
+
+</html>
